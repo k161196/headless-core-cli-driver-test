@@ -1,55 +1,63 @@
 import 'dart:developer' as developer;
 
 import 'package:flutter/material.dart';
-import 'core.dart';
+import 'package:provider/provider.dart';
+import 'cart_notifier.dart';
 
 void main() => runApp(const HelixDemoApp());
 
-class HelixDemoApp extends StatelessWidget {
+class HelixDemoApp extends StatefulWidget {
   const HelixDemoApp({super.key});
 
   @override
-  Widget build(BuildContext context) =>
-      const MaterialApp(home: CartPage(), debugShowCheckedModeBanner: false);
+  State<HelixDemoApp> createState() => _HelixDemoAppState();
 }
 
-// Same CartCore class the CLI drives headlessly — proves the core has
-// zero Flutter dependency and is shared verbatim, not re-implemented.
-class CartPage extends StatefulWidget {
-  const CartPage({super.key});
-
-  @override
-  State<CartPage> createState() => _CartPageState();
-}
-
-class _CartPageState extends State<CartPage> {
-  final _core = CartCore();
+class _HelixDemoAppState extends State<HelixDemoApp> {
+  final _notifier = CartNotifier();
 
   @override
   void initState() {
     super.initState();
     // Debug-only command channel: an external process (our live CLI) can
     // call these over the VM service URI `flutter run` prints, driving the
-    // exact same core the taps drive — no accessibility tree involved.
+    // same notifier Provider rebuilds the UI from — no accessibility tree.
     developer.registerExtension('ext.helix_demo.add', (method, params) async {
-      setState(() => _core.add(
-          params['item'] ?? 'apple', int.tryParse(params['qty'] ?? '1') ?? 1));
-      return developer.ServiceExtensionResponse.result(_core.toJsonString());
+      _notifier.add(
+          params['item'] ?? 'apple', int.tryParse(params['qty'] ?? '1') ?? 1);
+      return developer.ServiceExtensionResponse.result(
+          _notifier.toJsonString());
     });
     developer.registerExtension('ext.helix_demo.remove', (method, params) async {
-      setState(() => _core.remove(params['item'] ?? ''));
-      return developer.ServiceExtensionResponse.result(_core.toJsonString());
+      _notifier.remove(params['item'] ?? '');
+      return developer.ServiceExtensionResponse.result(
+          _notifier.toJsonString());
     });
     developer.registerExtension('ext.helix_demo.state', (method, params) async {
-      return developer.ServiceExtensionResponse.result(_core.toJsonString());
+      return developer.ServiceExtensionResponse.result(
+          _notifier.toJsonString());
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = _core.toJson();
+    return ChangeNotifierProvider.value(
+      value: _notifier,
+      child: const MaterialApp(
+          home: CartPage(), debugShowCheckedModeBanner: false),
+    );
+  }
+}
+
+class CartPage extends StatelessWidget {
+  const CartPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final notifier = context.watch<CartNotifier>();
+    final state = notifier.toJson();
     return Scaffold(
-      appBar: AppBar(title: const Text('Helix demo (shared core)')),
+      appBar: AppBar(title: const Text('Helix demo (provider)')),
       body: Column(
         children: [
           Padding(
@@ -63,7 +71,7 @@ class _CartPageState extends State<CartPage> {
                         title: Text('${e.key} x${e.value}'),
                         trailing: IconButton(
                           icon: const Icon(Icons.remove),
-                          onPressed: () => setState(() => _core.remove(e.key)),
+                          onPressed: () => notifier.remove(e.key),
                         ),
                       ))
                   .toList(),
@@ -72,7 +80,7 @@ class _CartPageState extends State<CartPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => setState(() => _core.add('apple')),
+        onPressed: () => notifier.add('apple'),
         child: const Icon(Icons.add),
       ),
     );
